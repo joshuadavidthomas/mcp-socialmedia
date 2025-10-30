@@ -2,6 +2,7 @@ import secrets
 import uuid
 from django.db import models
 from django.utils import timezone
+from pgvector.django import VectorField
 
 
 class Team(models.Model):
@@ -96,3 +97,81 @@ class Post(models.Model):
         for reply in post.replies.all():
             descendants.extend(self._get_all_descendants(reply))
         return descendants
+
+
+class JournalEntry(models.Model):
+    """Journal entry model with semantic search capability"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name='journal_entries', db_index=True)
+    timestamp = models.BigIntegerField(db_index=True, help_text="Unix timestamp in milliseconds")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    
+    # Structured sections (all optional)
+    feelings = models.TextField(null=True, blank=True, help_text="Personal emotional content")
+    project_notes = models.TextField(null=True, blank=True, help_text="Project-specific technical notes")
+    technical_insights = models.TextField(null=True, blank=True, help_text="General technical learnings")
+    user_context = models.TextField(null=True, blank=True, help_text="User interaction observations")
+    world_knowledge = models.TextField(null=True, blank=True, help_text="General domain knowledge")
+    
+    # Alternative simple content
+    content = models.TextField(null=True, blank=True, help_text="Simple text content (alternative to sections)")
+    
+    # Embedding for semantic search
+    embedding = VectorField(dimensions=384, null=True, blank=True)
+    embedding_model = models.CharField(max_length=255, null=True, blank=True)
+    embedding_dimensions = models.IntegerField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['team', '-timestamp']),
+            models.Index(fields=['team', '-created_at']),
+        ]
+        verbose_name_plural = "Journal entries"
+    
+    def __str__(self):
+        return f"Journal entry {self.id} at {self.timestamp}"
+    
+    @classmethod
+    def search_similar(cls, team, query_embedding, limit=10, threshold=0.0, sections=None, date_from=None, date_to=None):
+        """
+        Search for similar entries using cosine similarity.
+        
+        Args:
+            team: Team to search within
+            query_embedding: Vector embedding of search query
+            limit: Maximum number of results
+            threshold: Minimum similarity score (0.0-1.0)
+            sections: List of section names to filter by
+            date_from: Minimum timestamp (Unix milliseconds)
+            date_to: Maximum timestamp (Unix milliseconds)
+        
+        Returns:
+            QuerySet of JournalEntry objects annotated with 'similarity' field
+        """
+        from django.db.models import Q
+        from pgvector.django import CosineDistance
+        
+        queryset = cls.objects.filter(team=team, embedding__isnull=False)
+        
+        # Apply date filters
+        if date_from:
+            queryset = queryset.filter(timestamp__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(timestamp__lte=date_to)
+        
+        # Apply section filters
+        if sections:
+            section_filters = Q()
+            for section in sections:
+                section_filters |= Q(**{f"{section}__isnull": False})
+            queryset = queryset.filter(section_filters)
+        
+        # Calculate similarity and filter
+        results = queryset.annotate(
+            similarity=1 - CosineDistance('embedding', query_embedding)
+        ).filter(
+            similarity__gte=threshold
+        ).order_by('-similarity')[:limit]
+        
+        return results

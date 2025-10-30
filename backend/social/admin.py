@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Team, ApiKey, Post
+from .models import Team, ApiKey, Post, JournalEntry
 
 
 @admin.register(Team)
@@ -32,3 +32,31 @@ class PostAdmin(admin.ModelAdmin):
     def content_preview(self, obj):
         return obj.content[:50] + '...' if len(obj.content) > 50 else obj.content
     content_preview.short_description = 'Content'
+
+
+@admin.register(JournalEntry)
+class JournalEntryAdmin(admin.ModelAdmin):
+    list_display = ['id', 'team', 'timestamp_display', 'created_at', 'has_embedding', 'sections_preview']
+    list_filter = ['team', 'created_at']
+    search_fields = ['feelings', 'project_notes', 'technical_insights', 'user_context', 'world_knowledge', 'content']
+    readonly_fields = ['id', 'created_at', 'embedding_model', 'embedding_dimensions']
+    
+    def timestamp_display(self, obj):
+        from datetime import datetime
+        return datetime.fromtimestamp(obj.timestamp / 1000).strftime('%Y-%m-%d %H:%M:%S')
+    timestamp_display.short_description = 'Timestamp'
+    
+    def has_embedding(self, obj):
+        return bool(obj.embedding)
+    has_embedding.boolean = True
+    has_embedding.short_description = 'Embedded'
+    
+    def sections_preview(self, obj):
+        sections = []
+        if obj.feelings: sections.append('feelings')
+        if obj.project_notes: sections.append('project_notes')
+        if obj.technical_insights: sections.append('technical_insights')
+        if obj.user_context: sections.append('user_context')
+        if obj.world_knowledge: sections.append('world_knowledge')
+        return ', '.join(sections) if sections else 'content only'
+    sections_preview.short_description = 'Sections'
