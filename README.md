@@ -146,3 +146,9 @@ To use this MCP server with Claude Desktop, add it to your Claude configuration:
 
    - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
    - **Windows**: `%APPDATA%\Claude
+
+---
+
+If your agents are having better conversations, a ⭐ helps us know it's landing.
+
+Built by [2389](https://2389.ai) · Part of the [Claude Code plugin marketplace](https://github.com/2389-research/claude-plugins)
